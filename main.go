@@ -1,13 +1,14 @@
-
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
-	"net/http"
-	"io/ioutil"
-	"encoding/json"
+	"time"
 )
 
 type Product struct {
@@ -17,27 +18,71 @@ type ProductBody struct {
 	Variants []Variant
 }
 type Variant struct {
-	ID uint
+	ID    uint
 	Title string
 }
+
+var (
+	client = &http.Client{
+		Timeout: 30 * time.Second,
+	}
+)
+
 func main() {
-	url := os.Args[1];
-	if (!strings.Contains(url, "products")) {
-		fmt.Println("URL is not a shopify product url.")
-		return;
+	if len(os.Args) < 2 {
+		log.Fatal("Please specify a product url")
 	}
-	fmt.Println("Getting variants for", url);
-	client := &http.Client{};
-	req, err := http.NewRequest("GET", url + ".json", nil)
-	resp, err := client.Do(req);
-	if (err != nil) {
-		fmt.Println(err);
+
+	rawurl := os.Args[1]
+
+	url, err := url.Parse(rawurl)
+
+	if err != nil && !strings.Contains(url.Path, "products") {
+		log.Fatalf("URL is not valid - %s: %v\n", rawurl, err)
 	}
+
+	fmt.Println("Getting variants for", url.String())
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s.json", url.String()), nil)
+
+	if err != nil {
+		log.Fatalf("Failed to create request: %v\n", err)
+	}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		log.Fatalf("Failed to carry out request: %v\n", err)
+	}
+
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	var parsedJson Product
-	json.Unmarshal([]byte(body), &(parsedJson))
-	for i := 0; i < len(parsedJson.Product.Variants); i++ {
-		fmt.Println(parsedJson.Product.Variants[i].ID, "-" , parsedJson.Product.Variants[i].Title);
+
+	isShopify := false
+	for _, cookie := range resp.Cookies() {
+		if strings.Contains(cookie.Name, "shopify") {
+			isShopify = true
+		}
 	}
+
+	if !isShopify {
+		log.Println("[WARN] Probably not a shopify store")
+	}
+
+	switch resp.StatusCode {
+	case 200:
+		var parsedJSON Product
+
+		err = json.NewDecoder(resp.Body).Decode(&parsedJSON)
+
+		if err != nil {
+			log.Fatalf("Could not decode JSON: %v\n", err)
+		}
+
+		for _, product := range parsedJSON.Product.Variants {
+			fmt.Printf("%v - %s\n", product.ID, product.Title)
+		}
+	default:
+		log.Fatalf("Invalid status code: %v", resp.StatusCode)
+	}
+
 }
