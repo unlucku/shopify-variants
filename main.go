@@ -65,7 +65,7 @@ func main() {
 	}
 
 	if !isShopify {
-		log.Print("[WARN] Probably not a shopify store")
+		log.Println("[WARN] Probably not a shopify store")
 	}
 
 	switch resp.StatusCode {
