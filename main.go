@@ -61,6 +61,7 @@ func main() {
 	for _, cookie := range resp.Cookies() {
 		if strings.Contains(cookie.Name, "shopify") {
 			isShopify = true
+			break;
 		}
 	}
 
